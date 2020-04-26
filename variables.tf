@@ -131,7 +131,19 @@ variable "spot_instance_type" {
   default     = "one-time"
 }
 
-variable "capacity_providers" {
-  type    = list(string)
-  default = []
+variable "capacity_provider_enable" {
+  type    = bool
+  default = false
+}
+
+variable "capacity_provider_minimum_scaling_step_size" {
+  default = 1
+}
+
+variable "capacity_provider_maximum_scaling_step_size" {
+  default = 1000
+}
+
+variable "capacity_provider_target_capacity" {
+  default = 1
 }

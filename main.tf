@@ -242,6 +242,27 @@ resource "aws_autoscaling_group" "container_instance" {
 resource "aws_ecs_cluster" "container_instance" {
   name = coalesce(var.cluster_name, local.cluster_name)
 
-  capacity_providers = var.capacity_providers
+  capacity_providers = var.capacity_provider_enabled ? [aws_ecs_capacity_provider.container_instance_capacity_provider.name] : []
 }
 
+
+resource "aws_ecs_capacity_provider" "container_instance_capacity_provider" {
+  count = var.capacity_provider_enable ? 1 : 0
+  name  = "${aws_autoscaling_group.container_instance.name}_CapacityProvider"
+
+  dynamic "auto_scaling_group_provider" {
+    for_each = var.capacity_provider_enable ? [1] : []
+    content {
+      auto_scaling_group_arn = aws_autoscaling_group.container_instance.arn
+
+      managed_termination_protection = "ENABLED"
+
+      managed_scaling {
+        status                    = "ENABLED"
+        minimum_scaling_step_size = var.capacity_provider_minimum_scaling_step_size
+        maximum_scaling_step_size = var.capacity_provider_maximum_scaling_step_size
+        target_capacity           = var.capacity_provider_target_capacity
+      }
+    }
+  }
+}
