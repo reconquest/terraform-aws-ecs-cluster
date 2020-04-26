@@ -181,6 +181,19 @@ resource "aws_launch_template" "container_instance" {
   monitoring {
     enabled = var.detailed_monitoring
   }
+
+
+  dynamic "instance_market_options" {
+    for_each = var.spot_enable ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options {
+        max_price                      = var.spot_max_price
+        instance_interruption_behavior = var.spot_instance_interruption_behavior
+        spot_instance_type             = var.spot_instance_type
+      }
+    }
+  }
 }
 
 resource "aws_autoscaling_group" "container_instance" {

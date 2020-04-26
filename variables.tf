@@ -106,3 +106,27 @@ variable "subnet_ids" {
   type = list(string)
 }
 
+
+variable "spot_enable" {
+  description = "Enable spot instance"
+  type        = bool
+  default     = false
+}
+
+variable "spot_max_price" {
+  description = "Spot instance bid max price"
+  type        = string
+  default     = "1"
+}
+
+variable "spot_instance_interruption_behavior" {
+  description = "Spot instance interruption behavior"
+  type        = string
+  default     = "terminate"
+}
+
+variable "spot_instance_type" {
+  description = "Spot instance type: persistent / one-time"
+  type        = string
+  default     = "one-time"
+}
