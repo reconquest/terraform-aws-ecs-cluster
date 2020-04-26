@@ -241,5 +241,7 @@ resource "aws_autoscaling_group" "container_instance" {
 #
 resource "aws_ecs_cluster" "container_instance" {
   name = coalesce(var.cluster_name, local.cluster_name)
+
+  capacity_providers = var.capacity_providers
 }
 

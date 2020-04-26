@@ -130,3 +130,7 @@ variable "spot_instance_type" {
   type        = string
   default     = "one-time"
 }
+
+variable "capacity_providers" {
+  type = list(string)
+}
