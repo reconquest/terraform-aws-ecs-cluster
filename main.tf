@@ -15,7 +15,7 @@ data "aws_iam_policy_document" "container_instance_ec2_assume_role" {
 }
 
 resource "aws_iam_role" "container_instance_ec2" {
-  name               = "${var.environment}ContainerInstanceProfile"
+  name               = "${coalesce(var.ecs_for_ec2_service_role_name, local.ecs_for_ec2_service_role_name)}"
   assume_role_policy = "${data.aws_iam_policy_document.container_instance_ec2_assume_role.json}"
 }
 
@@ -47,7 +47,7 @@ data "aws_iam_policy_document" "ecs_assume_role" {
 }
 
 resource "aws_iam_role" "ecs_service_role" {
-  name               = "ecs${title(var.environment)}ServiceRole"
+  name               = "${coalesce(var.ecs_service_role_name, local.ecs_service_role_name)}"
   assume_role_policy = "${data.aws_iam_policy_document.ecs_assume_role.json}"
 }
 
@@ -76,7 +76,7 @@ resource "aws_security_group" "container_instance" {
   vpc_id = "${var.vpc_id}"
 
   tags {
-    Name        = "sgContainerInstance"
+    Name        = "${coalesce(var.security_group_name, local.security_group_name)}"
     Project     = "${var.project}"
     Environment = "${var.environment}"
   }
@@ -111,15 +111,11 @@ data "template_cloudinit_config" "container_instance_cloud_config" {
 data "aws_ami" "ecs_ami" {
   count       = "${var.lookup_latest_ami ? 1 : 0}"
   most_recent = true
+  owners      = ["${var.ami_owners}"]
 
   filter {
     name   = "name"
     values = ["amzn-ami-*-amazon-ecs-optimized"]
-  }
-
-  filter {
-    name   = "owner-alias"
-    values = ["${var.ami_owners}"]
   }
 
   filter {
@@ -185,7 +181,7 @@ resource "aws_autoscaling_group" "container_instance" {
     create_before_destroy = true
   }
 
-  name = "asg${title(var.environment)}ContainerInstance"
+  name = "${coalesce(var.autoscaling_group_name, local.autoscaling_group_name)}"
 
   launch_template = {
     id      = "${aws_launch_template.container_instance.id}"
@@ -199,7 +195,7 @@ resource "aws_autoscaling_group" "container_instance" {
   min_size                  = "${var.min_size}"
   max_size                  = "${var.max_size}"
   enabled_metrics           = ["${var.enabled_metrics}"]
-  vpc_zone_identifier       = ["${var.private_subnet_ids}"]
+  vpc_zone_identifier       = ["${var.subnet_ids}"]
 
   tag {
     key                 = "Name"
@@ -224,102 +220,5 @@ resource "aws_autoscaling_group" "container_instance" {
 # ECS resources
 #
 resource "aws_ecs_cluster" "container_instance" {
-  name = "ecs${title(var.environment)}Cluster"
-}
-
-#
-# CloudWatch resources
-#
-resource "aws_autoscaling_policy" "container_instance_scale_up" {
-  name                   = "asgScalingPolicy${title(var.environment)}ClusterScaleUp"
-  scaling_adjustment     = 1
-  adjustment_type        = "ChangeInCapacity"
-  cooldown               = "${var.scale_up_cooldown_seconds}"
-  autoscaling_group_name = "${aws_autoscaling_group.container_instance.name}"
-}
-
-resource "aws_autoscaling_policy" "container_instance_scale_down" {
-  name                   = "asgScalingPolicy${title(var.environment)}ClusterScaleDown"
-  scaling_adjustment     = -1
-  adjustment_type        = "ChangeInCapacity"
-  cooldown               = "${var.scale_down_cooldown_seconds}"
-  autoscaling_group_name = "${aws_autoscaling_group.container_instance.name}"
-}
-
-resource "aws_cloudwatch_metric_alarm" "container_instance_high_cpu" {
-  alarm_name          = "alarm${title(var.environment)}ClusterCPUReservationHigh"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "${var.high_cpu_evaluation_periods}"
-  metric_name         = "CPUReservation"
-  namespace           = "AWS/ECS"
-  period              = "${var.high_cpu_period_seconds}"
-  statistic           = "Maximum"
-  threshold           = "${var.high_cpu_threshold_percent}"
-
-  dimensions {
-    ClusterName = "${aws_ecs_cluster.container_instance.name}"
-  }
-
-  alarm_description = "Scale up if CPUReservation is above N% for N duration"
-  alarm_actions     = ["${aws_autoscaling_policy.container_instance_scale_up.arn}"]
-}
-
-resource "aws_cloudwatch_metric_alarm" "container_instance_low_cpu" {
-  alarm_name          = "alarm${title(var.environment)}ClusterCPUReservationLow"
-  comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = "${var.low_cpu_evaluation_periods}"
-  metric_name         = "CPUReservation"
-  namespace           = "AWS/ECS"
-  period              = "${var.low_cpu_period_seconds}"
-  statistic           = "Maximum"
-  threshold           = "${var.low_cpu_threshold_percent}"
-
-  dimensions {
-    ClusterName = "${aws_ecs_cluster.container_instance.name}"
-  }
-
-  alarm_description = "Scale down if the CPUReservation is below N% for N duration"
-  alarm_actions     = ["${aws_autoscaling_policy.container_instance_scale_down.arn}"]
-
-  depends_on = ["aws_cloudwatch_metric_alarm.container_instance_high_cpu"]
-}
-
-resource "aws_cloudwatch_metric_alarm" "container_instance_high_memory" {
-  alarm_name          = "alarm${title(var.environment)}ClusterMemoryReservationHigh"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "${var.high_memory_evaluation_periods}"
-  metric_name         = "MemoryReservation"
-  namespace           = "AWS/ECS"
-  period              = "${var.high_memory_period_seconds}"
-  statistic           = "Maximum"
-  threshold           = "${var.high_memory_threshold_percent}"
-
-  dimensions {
-    ClusterName = "${aws_ecs_cluster.container_instance.name}"
-  }
-
-  alarm_description = "Scale up if the MemoryReservation is above N% for N duration"
-  alarm_actions     = ["${aws_autoscaling_policy.container_instance_scale_up.arn}"]
-
-  depends_on = ["aws_cloudwatch_metric_alarm.container_instance_low_cpu"]
-}
-
-resource "aws_cloudwatch_metric_alarm" "container_instance_low_memory" {
-  alarm_name          = "alarm${title(var.environment)}ClusterMemoryReservationLow"
-  comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = "${var.low_memory_evaluation_periods}"
-  metric_name         = "MemoryReservation"
-  namespace           = "AWS/ECS"
-  period              = "${var.low_memory_period_seconds}"
-  statistic           = "Maximum"
-  threshold           = "${var.low_memory_threshold_percent}"
-
-  dimensions {
-    ClusterName = "${aws_ecs_cluster.container_instance.name}"
-  }
-
-  alarm_description = "Scale down if the MemoryReservation is below N% for N duration"
-  alarm_actions     = ["${aws_autoscaling_policy.container_instance_scale_down.arn}"]
-
-  depends_on = ["aws_cloudwatch_metric_alarm.container_instance_high_memory"]
+  name = "${coalesce(var.cluster_name, local.cluster_name)}"
 }
