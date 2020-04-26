@@ -132,5 +132,6 @@ variable "spot_instance_type" {
 }
 
 variable "capacity_providers" {
-  type = list(string)
+  type    = list(string)
+  default = []
 }
