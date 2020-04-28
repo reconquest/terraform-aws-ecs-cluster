@@ -34,3 +34,6 @@ output "container_instance_ecs_for_ec2_service_role_arn" {
   value = aws_iam_role.container_instance_ec2.arn
 }
 
+output "capacity_provider_name" {
+  value = var.capacity_provider_enable ? aws_ecs_capacity_provider.container_instance_capacity_provider[0].name : ""
+}

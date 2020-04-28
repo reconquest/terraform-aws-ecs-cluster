@@ -88,24 +88,10 @@ resource "aws_security_group" "container_instance" {
 #
 # AutoScaling resources
 #
-data "template_file" "container_instance_base_cloud_config" {
-  template = file(
-    "${path.module}/cloud-config/base-container-instance.yml.tpl",
-  )
-
-  vars = {
-    ecs_cluster_name = aws_ecs_cluster.container_instance.name
-  }
-}
 
 data "template_cloudinit_config" "container_instance_cloud_config" {
   gzip          = false
   base64_encode = false
-
-  part {
-    content_type = "text/cloud-config"
-    content      = data.template_file.container_instance_base_cloud_config.rendered
-  }
 
   part {
     content_type = var.cloud_config_content_type
@@ -216,6 +202,7 @@ resource "aws_autoscaling_group" "container_instance" {
   max_size                  = var.max_size
   enabled_metrics           = var.enabled_metrics
   vpc_zone_identifier       = var.subnet_ids
+  protect_from_scale_in     = true
 
   tag {
     key                 = "Name"
@@ -242,13 +229,20 @@ resource "aws_autoscaling_group" "container_instance" {
 resource "aws_ecs_cluster" "container_instance" {
   name = coalesce(var.cluster_name, local.cluster_name)
 
-  capacity_providers = var.capacity_provider_enabled ? [aws_ecs_capacity_provider.container_instance_capacity_provider.name] : []
+  capacity_providers = var.capacity_provider_enable ? [aws_ecs_capacity_provider.container_instance_capacity_provider[0].name] : []
+  dynamic "default_capacity_provider_strategy" {
+    for_each = var.capacity_provider_enable ? [1] : []
+    content {
+      capacity_provider = aws_ecs_capacity_provider.container_instance_capacity_provider[0].name
+      weight            = 1
+    }
+  }
 }
 
 
 resource "aws_ecs_capacity_provider" "container_instance_capacity_provider" {
   count = var.capacity_provider_enable ? 1 : 0
-  name  = "${aws_autoscaling_group.container_instance.name}_CapacityProvider"
+  name  = "${coalesce(var.autoscaling_group_name, local.autoscaling_group_name)}_Capacity_Provider_${random_id.capacity_provider.hex}"
 
   dynamic "auto_scaling_group_provider" {
     for_each = var.capacity_provider_enable ? [1] : []
@@ -265,4 +259,13 @@ resource "aws_ecs_capacity_provider" "container_instance_capacity_provider" {
       }
     }
   }
+}
+
+resource "random_id" "capacity_provider" {
+  keepers = {
+    # Generate a new id each time we switch to a new AMI id
+    autoscaling_group = aws_autoscaling_group.container_instance.arn
+  }
+
+  byte_length = 8
 }
